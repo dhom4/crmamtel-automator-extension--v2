@@ -24,6 +24,20 @@ function isDuplicate(iccid) {
   return iccidLog.some(entry => entry.iccid === iccid);
 }
 
+
+// Check if MSISDN was used in the last 2 days
+function isMsisdnUsedRecently(msisdn, maxDays = 7) {
+  const now = Date.now();
+  const cutoff = now - (maxDays * 24 * 60 * 60 * 1000); // 2 days in ms
+
+  return iccidLog.some(entry => {
+    if (entry.msisdn !== msisdn) return false;
+    
+    const entryTime = new Date(entry.timestamp).getTime();
+    return entryTime >= cutoff; // only recent entries
+  });
+}
+
 // --- Main logging function ---
 function saveIccid(iccid, options = {}) {
   if (!iccid || typeof iccid !== 'string') {
@@ -136,24 +150,6 @@ async function getValidIccidSuffix(initialMessage = "Enter ICCID suffix (7 digit
   return null;
 }
 
-// --- AUTO-CLEAR OLD LOGS ---
-function clearOldLogs() {
-  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-  const cutoff = Date.now() - THIRTY_DAYS;
-  const originalCount = iccidLog.length;
-  
-  iccidLog = iccidLog.filter(entry => {
-    const entryTime = new Date(entry.timestamp).getTime();
-    return entryTime >= cutoff;
-  });
-
-  if (iccidLog.length < originalCount) {
-    saveLog();
-    console.log(`🧹 Cleared ${originalCount - iccidLog.length} old logs.`);
-  }
-}
-clearOldLogs();
-
 // --- GENERATE REPORT ---
 // --- GENERATE DAILY ACTIVATION REPORT ---
 // --- ENHANCED ACTIVATION REPORT ---
@@ -196,41 +192,41 @@ function generateActivationReport(format = 'detailed') {
     filename = `ICCID-Simple-${new Date().toISOString().split('T')[0]}.txt`;
 
   } else if (format === 'csv') {
- // ✅ MATCH download_log() EXACTLY
+    // ✅ MATCH download_log() EXACTLY
 
-  function formatDateDisplay(dateStr) {
-    const d = new Date(dateStr);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    const seconds = String(d.getSeconds()).padStart(2, '0');
-    return {
-      date: `${day}/${month}/${year}`,
-      time: `${hours}:${minutes}:${seconds}`
-    };
-  }
+    function formatDateDisplay(dateStr) {
+      const d = new Date(dateStr);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const seconds = String(d.getSeconds()).padStart(2, '0');
+      return {
+        date: `${day}/${month}/${year}`,
+        time: `${hours}:${minutes}:${seconds}`
+      };
+    }
 
-  const headers = ['Date', 'Time', 'ICCID', 'MSISDN', 'Notes'];
-  const rows = iccidLog.map(e => {
-    const { date, time } = formatDateDisplay(e.timestamp);
-    // ✅ EXACT same format as download_log(): no quotes, no escaping
-    return [
-      date,
-      time,
-      e.iccid,        // 7-digit suffix only
-      e.msisdn,       // clean (no 252)
-      ''              // empty Notes
-    ].join(',');
-  });
+    const headers = ['Date', 'Time', 'ICCID', 'MSISDN', 'Notes'];
+    const rows = iccidLog.map(e => {
+      const { date, time } = formatDateDisplay(e.timestamp);
+      // ✅ EXACT same format as download_log(): no quotes, no escaping
+      return [
+        date,
+        time,
+        e.iccid,        // 7-digit suffix only
+        e.msisdn,       // clean (no 252)
+        ''              // empty Notes
+      ].join(',');
+    });
 
-  content = [headers.join(','), ...rows].join('\n');
-  filename = `ICCID-Export-${new Date().toISOString().split('T')[0]}.csv`;
-  type = 'text/csv';
+    content = [headers.join(','), ...rows].join('\n');
+    filename = `ICCID-Export-${new Date().toISOString().split('T')[0]}.csv`;
+    type = 'text/csv';
 
   } else {
-    // Detailed report with error detection + copy blocks
+    // ✅ CLEAN DETAILED REPORT WITH MONTH DIVIDERS (no warnings, no copy blocks)
     const dailyData = {};
     for (const entry of iccidLog) {
       const d = new Date(entry.timestamp);
@@ -249,43 +245,28 @@ function generateActivationReport(format = 'detailed') {
       `ICCID ACTIVATION REPORT`,
       `=====================`,
       `Total Activations: ${iccidLog.length}`,
-      ``
+      ``,
+      `DAILY BREAKDOWN:`
     ];
 
-    lines.push(`DAILY BREAKDOWN:`);
+    let lastMonth = null;
     for (const date of sortedDates) {
+      const [day, month, year] = date.split('/');
+      const monthKey = `${year}-${month}`;
+
+      // ✅ Add divider when month changes
+      if (lastMonth !== null && lastMonth !== monthKey) {
+        lines.push(`\n───────────────`, ``);
+      }
+      lastMonth = monthKey;
+
       const entries = dailyData[date];
-      lines.push(`\n${date} (${entries.length} activation(s)):`);
+      lines.push(`${date} (${entries.length} activation(s)}):`);
       entries.forEach(e => {
         lines.push(`  • ICCID: ${e.iccid} | MSISDN: ${e.msisdn}`);
       });
+      lines.push(``); // blank line after each day
     }
-
-    // Error detection
-    const invalidIccids = iccidLog.filter(e => e.iccid.length !== 7);
-    const invalidMsisdns = iccidLog.filter(e => e.msisdn.length < 9 || e.msisdn.length > 10);
-    
-    if (invalidIccids.length > 0 || invalidMsisdns.length > 0) {
-      lines.push(`\n⚠️  VALIDATION WARNINGS:`);
-      if (invalidIccids.length > 0) {
-        lines.push(`  - ${invalidIccids.length} ICCID(s) not 7 digits:`);
-        invalidIccids.forEach(e => lines.push(`    → ${e.iccid}`));
-      }
-      if (invalidMsisdns.length > 0) {
-        lines.push(`  - ${invalidMsisdns.length} MSISDN(s) invalid length (should be 9-10 digits):`);
-        invalidMsisdns.forEach(e => lines.push(`    → ${e.msisdn}`));
-      }
-    }
-
-    // Copy-paste blocks
-    lines.push(
-      `\n--- COPY-PASTE BLOCKS ---`,
-      `ICCID Suffixes (comma-separated):`,
-      iccidLog.map(e => e.iccid).join(', '),
-      ``,
-      `MSISDNs (newline-separated):`,
-      iccidLog.map(e => e.msisdn).join('\n')
-    );
 
     content = lines.join('\n');
     filename = `ICCID-Report-Complete-${new Date().toISOString().split('T')[0]}.txt`;
@@ -795,8 +776,8 @@ async function addMsisdnSeries() {
     if (rawMsisdn.length < 9) continue;
 
     // ✅ Check if already in your log
-    const isUsed = iccidLog.some(entry => entry.msisdn === rawMsisdn);
-    if (!isUsed) {
+      const isUsed = isMsisdnUsedRecently(rawMsisdn, 2); // last 2 days
+      if (!isUsed) {
       selectedIdx = idx;
       capturedMsisdn = rawMsisdn;
       break; // Use this one!
@@ -969,28 +950,68 @@ async function next() {
   await clickButton("Next");
   await clickButton("Next");
   await wait(1000);
+  
   await clickButton("Checkout");
-  await wait(1000);
-
-  async function closeModal(timeout = 8000) {
-    const start = performance.now();
-    let closeBtn = null;
-    while (performance.now() - start < timeout) {
-      closeBtn = [...document.querySelectorAll("button.btn.btn-small.btn-info")]
-        .find(b => b.textContent.trim().toLowerCase() === "close");
-      if (closeBtn) break;
-      await wait(200);
-    }
-    if (closeBtn) {
-      closeBtn.click();
-      console.log("Modal closed.");
-      await wait(500);
+  
+  
+async function closeModal(timeout = 8000) {
+  const start = performance.now();
+  let closeBtn = null;
+  while (performance.now() - start < timeout) {
+    closeBtn = [...document.querySelectorAll("button.btn.btn-small.btn-info")]
+      .find(b => b.textContent.trim().toLowerCase() === "close");
+    if (closeBtn) break;
+    await wait(200);
+  }
+  if (closeBtn) {
+    closeBtn.click();
+    console.log("Modal closed.");
+    await wait(500);
     }
   }
+  
+// Wait for checkout modal body WITH content
+let checkoutModalBody = null;
+for (let i = 0; i < 50; i++) { // Max 5s
+  checkoutModalBody = document.querySelector('.modal.show .modal-body'); // Target VISIBLE modal
+  if (checkoutModalBody?.textContent.trim()) break;
+  await wait(100);
+}
 
-  await wait(1000);
-  await closeModal();
+if (checkoutModalBody) {
+  // Fallback chain: span > direct p > any text
+  const msg = 
+    checkoutModalBody.querySelector('span')?.textContent.trim() ||
+    checkoutModalBody.querySelector(':scope > p')?.textContent.trim() ||
+    checkoutModalBody.textContent.trim();
+    console.log("✅ Checkout Message:", msg);
+    await wait(1500);
+    await closeModal();
+} else {
+  console.warn("⚠️ Checkout modal not detected");
+}
 
+await wait(3000);
+  
+
+console.log("🚀 Starting activation flow...");
+const activationResult = await completeActivationFlow();
+
+if (activationResult?.success) {
+  console.log("✅ FULL PROCESS COMPLETED SUCCESSFULLY");
+  console.log("ICCID:", activationResult.iccid);
+  console.log("MSISDN:", activationResult.msisdn);
+  console.log("Message:", activationResult.message);
+} else {
+  console.warn("⚠️ Activation flow encountered issues");
+}
+// =========================================
+// COMPLETE ACTIVATION FLOW
+// =========================================
+async function completeActivationFlow() {
+  const wait = (ms) => new Promise(res => setTimeout(res, ms));
+
+  // --- 1. COPY ICCID ---
   function copyToClipboard(value) {
     const text = String(value);
     const textarea = document.createElement("textarea");
@@ -1003,86 +1024,218 @@ async function next() {
     try {
       document.execCommand("copy");
       console.log("✅ COPIED:", text);
+      return true;
     } catch (err) {
       console.error("❌ Copy failed:", err);
+      return false;
+    } finally {
+      document.body.removeChild(textarea);
     }
-    document.body.removeChild(textarea);
   }
 
-  console.log(gloable_icc_id);
+  console.log("📋 Copying ICCID:", gloable_icc_id);
   copyToClipboard(gloable_icc_id);
 
+  await wait(500);
+
+  // --- 2. NAVIGATE HOME ---
   function clickHomeLogo() {
     const logo = document.querySelector("img.logoImg");
-    if (logo) {
-      logo.click();
-      console.log("Home logo clicked.");
-    } else {
-      console.warn("Home logo not found.");
+    if (!logo) {
+      console.warn("⚠️ Home logo not found.");
+      return false;
     }
+    logo.click();
+    console.log("🏠 Home logo clicked.");
+    return true;
   }
 
+  if (!clickHomeLogo()) return false;
+  await wait(1000);
+
+  // --- 3. SELECT ICCID IN DROPDOWN ---
   function selectICCID() {
     const select = document.querySelector("select#idtype");
     if (!select) {
-      console.warn("Dropdown not found.");
-      return;
+      console.warn("⚠️ Dropdown not found.");
+      return false;
     }
     const option = [...select.options].find(
       opt => opt.textContent.trim().toLowerCase() === "iccid"
     );
     if (!option) {
-      console.warn("ICCID option not found.");
-      return;
+      console.warn("⚠️ ICCID option not found.");
+      return false;
     }
     select.value = option.value;
-    select.dispatchEvent(new Event("change"));
-    console.log("Dropdown changed to ICCID.");
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    console.log("🔽 Dropdown changed to ICCID.");
+    return true;
   }
 
+  if (!selectICCID()) return false;
+  await wait(300);
+
+  // --- 4. FILL SEARCH BAR ---
   function fillSearchBar() {
     const input = document.querySelector("input#number");
     if (!input) {
-      console.warn("Search bar not found.");
-      return;
+      console.warn("⚠️ Search bar not found.");
+      return false;
     }
     input.value = gloable_icc_id;
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    console.log("Search bar filled with:", gloable_icc_id);
+    console.log("🔍 Search bar filled:", gloable_icc_id);
+    return true;
   }
 
+  if (!fillSearchBar()) return false;
+  await wait(300);
+
+  // --- 5. CLICK SEARCH ---
   function clickSearchButton() {
     const searchBtn = [...document.querySelectorAll("button.btn.btn-info")]
       .find(btn => btn.textContent.trim().toLowerCase().includes("search"));
     if (!searchBtn) {
-      console.warn("Search button not found.");
-      return;
+      console.warn("⚠️ Search button not found.");
+      return false;
     }
     searchBtn.click();
-    console.log("Search button clicked.");
+    console.log("🔍 Search button clicked.");
+    return true;
   }
 
+  if (!clickSearchButton()) return false;
+  await wait(1000);
+
+  // --- 6. CLICK ACTIVATE BUTTON ---
   async function clickActivateButton(timeout = 8000) {
     const start = performance.now();
     let activateBtn = null;
+    
     while (performance.now() - start < timeout) {
       activateBtn = [...document.querySelectorAll("span.material-icons.green")]
         .find(el => el.textContent.trim() === "check_circle");
       if (activateBtn) break;
-      await new Promise(res => setTimeout(res, 200));
+      await wait(200);
     }
+    
     if (!activateBtn) {
-      console.warn("Activate button not found.");
-      return;
+      console.warn("⚠️ Activate button not found within timeout.");
+      return false;
     }
+    
     activateBtn.click();
-    console.log("Activate button clicked.");
+    console.log("✅ Activate button clicked.");
+    return true;
   }
 
-  await wait(1000);
-  clickHomeLogo();
-  selectICCID();
-  fillSearchBar();
-  clickSearchButton();
-  await clickActivateButton();
+  if (!(await clickActivateButton())) return false;
+  await wait(1500); // Wait for activation modal
+
+  // --- 7. READ ACTIVATION MESSAGE ---
+  async function readActivationMessage() {
+    let activationModalBody = null;
+    
+    // Wait for modal with content (max 5s)
+    for (let i = 0; i < 50; i++) {
+      activationModalBody = document.querySelector('.modal.show .modal-body');
+      if (activationModalBody?.textContent.trim()) break;
+      await wait(100);
+    }
+    
+    if (!activationModalBody) {
+      console.warn("⚠️ Activation modal not detected");
+      return null;
+    }
+    
+    // Fallback chain: direct p > any p > raw text
+    const message = 
+      activationModalBody.querySelector(':scope > p')?.textContent.trim() ||
+      activationModalBody.querySelector('p')?.textContent.trim() ||
+      activationModalBody.textContent.trim();
+    
+    console.log("📨 Activation Message:", message);
+    return message;
+  }
+
+  const activationMessage = await readActivationMessage();
+  
+  // --- 8. AUTO-CLOSE IF SUCCESS ---
+  async function closeModal(timeout = 8000) {
+    const start = performance.now();
+    let closeBtn = null;
+    
+    while (performance.now() - start < timeout) {
+      closeBtn = [...document.querySelectorAll("button.btn.btn-small.btn-info")]
+        .find(b => b.textContent.trim().toLowerCase() === "close");
+      if (closeBtn) break;
+      await wait(200);
+    }
+    
+    if (closeBtn) {
+      closeBtn.click();
+      console.log("🚪 Modal closed.");
+      await wait(500);
+      return true;
+    }
+    
+    console.warn("⚠️ Close button not found.");
+    return false;
+  }
+
+  // Close modal if activation was successful
+  if (activationMessage && 
+      (activationMessage.toLowerCase().includes('success') || 
+       activationMessage.toLowerCase().includes('activated') ||
+       activationMessage.toLowerCase().includes('completed'))) {
+    console.log("🎉 Activation successful! Closing modal...");
+    await wait(1500);
+    await closeModal();
+  }
+
+  console.log("✨ Activation flow completed.");
+  return {
+    success: true,
+    message: activationMessage,
+    iccid: gloable_icc_id,
+    msisdn: gloable_msisdn
+  };
+}
+
+//
+// Wait for activation modal body WITH content
+//
+let activationModalBody = null;
+for (let i = 0; i < 50; i++) {
+  activationModalBody = document.querySelector('.modal.show .modal-body');
+  if (activationModalBody?.textContent.trim()) break;
+  await wait(100);
+}
+if (activationModalBody) {
+  // Fallback chain: direct p > any p > raw text
+  const msg = 
+    activationModalBody.querySelector(':scope > p')?.textContent.trim() ||
+    activationModalBody.querySelector('p')?.textContent.trim() ||
+    activationModalBody.textContent.trim();
+    console.log("✅ Activation Message:", msg);
+  
+  if (msg.toLowerCase().includes('Subscriber not found') || msg.toLowerCase().includes('not')) {
+    if (iccidLog.length > 0) {
+        const removed = iccidLog.pop();
+        saveLog();
+        console.log("🗑️ Removed failed entry:", removed);
+      }
+  }
+  
+  // Optional: Auto-close if success detected
+  if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('activated')) {
+    await wait(1500);
+    await closeModal();
+  }
+} else {
+  console.warn("⚠️ Activation modal not detected");
+}
+
+  
 }
