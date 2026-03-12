@@ -1,6 +1,7 @@
 # CRM Amtel Automator – Chrome Extension Guide
 
 This tool is a **Chrome extension** that adds easy-to-use buttons to your browser when you're on the Amtel CRM website. No coding needed—just click buttons to automate registration and activation!
+
 <img width="491" height="393" alt="Untitled" src="https://github.com/user-attachments/assets/c1be79e0-102e-42f1-9426-0a10894bfd70" />
 
 ---
