@@ -119,7 +119,7 @@ function detectIccidInUi(expectedIccid) {
 }
 
 // --- Get valid 7-digit ICCID suffix with retry ---
-async function getValidIccidSuffix(initialMessage = "Enter ICCID suffix (7 digits):") {
+async function getValidIccidSuffix(initialMessage = "Enter ICCID last 7 digits (will auto-add 8925263790000):") {
   const MAX_ATTEMPTS = 3;
   let attempt = 0;
 
@@ -150,9 +150,44 @@ async function getValidIccidSuffix(initialMessage = "Enter ICCID suffix (7 digit
   return null;
 }
 
+// --- Get valid 7-digit MSISDN suffix with retry ---
+async function getValidMsisdnSuffix(initialMessage = "Enter MSISDN last 7 digits (will auto-add 25271):") {
+  const MAX_ATTEMPTS = 3;
+  let attempt = 0;
+
+  while (attempt < MAX_ATTEMPTS) {
+    const suffix = prompt(
+      `${initialMessage}\nAttempt ${attempt + 1}/${MAX_ATTEMPTS}:`
+    );
+
+    if (suffix === null) {
+      return null; // User clicked Cancel
+    }
+
+    const clean = suffix.replace(/\D/g, ''); // Remove all non-digits
+    
+    // Check if it's exactly 7 digits
+    if (clean.length === 7) {
+      return clean;
+    }
+
+    attempt++;
+    if (attempt >= MAX_ATTEMPTS) {
+      alert(`❌ Max attempts (${MAX_ATTEMPTS}) reached.\nExpected 7 digits, got "${clean}" (${clean.length} digits).`);
+      return null;
+    }
+
+    alert(
+      `⚠️ Invalid input!\nYou entered: "${suffix}"\nCleaned to: "${clean}" (${clean.length} digits)\nPlease enter exactly 7 digits.`
+    );
+  }
+  return null;
+}
+
 // --- GENERATE REPORT ---
-// --- GENERATE DAILY ACTIVATION REPORT ---
-// --- ENHANCED ACTIVATION REPORT ---
+// --- UNIFIED ACTIVATION REPORT (with all formats) ---
+
+// --- GENERATE REPORT ---
 // --- UNIFIED ACTIVATION REPORT (with all formats) ---
 function generateActivationReport(format = 'detailed') {
   if (!iccidLog.length) {
@@ -251,7 +286,7 @@ function generateActivationReport(format = 'detailed') {
     type = 'text/csv';
 
   } else {
-    // ✅ CLEAN DETAILED REPORT WITH MONTH DIVIDERS (no warnings, no copy blocks)
+    // CLEAN DETAILED REPORT WITH MONTH DIVIDERS
     const dailyData = {};
     for (const entry of iccidLog) {
       const d = new Date(entry.timestamp);
@@ -279,7 +314,7 @@ function generateActivationReport(format = 'detailed') {
       const [day, month, year] = date.split('/');
       const monthKey = `${year}-${month}`;
 
-      // ✅ Add divider when month changes
+      // Add divider when month changes
       if (lastMonth !== null && lastMonth !== monthKey) {
         lines.push(`\n───────────────`, ``);
       }
@@ -307,36 +342,30 @@ function generateActivationReport(format = 'detailed') {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
+}// In browser console:
 
-// Keep the old name as alias for backward compatibility
-window.generateActivationReport = generateActivationReport;
+// For detailed report with month dividers (default)
+// generateActivationReport();
+// For simple daily counts
+// generateActivationReport('simple');
+// For CSV export (Excel compatible)
+// generateActivationReport('csv');
 
-// --- RETRY FUNCTION ---
-// --- RETRY FUNCTION (FIXED: preserves state on cancel) ---
-async function retryIccidSelection() {
-  console.log("🔁 Retrying ICCID selection...");
 
-  // ✅ SAVE CURRENT STATE in case user cancels
-  const original_iccid = gloable_icc_id;
-  const original_prompt = iccidPromptProvided;
-  const original_confirmed = iccidUiConfirmed;
 
-  // Reset for retry attempt
-  iccidPromptProvided = false;
-  iccidUiConfirmed = false;
-  gloable_icc_id = null;
-
-  const wait = (ms) => new Promise(res => setTimeout(res, ms));
-  const addIcons = [...document.querySelectorAll("button.btn.btn-info .material-icons")].filter(s => s.textContent.trim() === "add");
+// =========================================
+// HANDLE ICCID — WITH AUTO-SELECT AND SAVE AND RETRY UNTIL FOUND
+// =========================================
+async function handle_ICCID() {
+  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+  
+  const addIcons = [
+    ...document.querySelectorAll("button.btn.btn-info .material-icons"),
+  ].filter((s) => s.textContent.trim() === "add");
+  
   const addBtn = addIcons[2]?.closest("button");
   if (!addBtn) {
-    alert("❌ ICCID Add button not found. Is Page 2 loaded?");
-    
-    // ❌ Restore state if we can't even start retry
-    gloable_icc_id = original_iccid;
-    iccidPromptProvided = original_prompt;
-    iccidUiConfirmed = original_confirmed;
+    console.warn("ICCID Add button not found.");
     return false;
   }
 
@@ -344,70 +373,460 @@ async function retryIccidSelection() {
 
   let modal = null;
   for (let i = 0; i < 25; i++) {
-    modal = [...document.querySelectorAll(".modal-content")].find(m => m.textContent.includes("IMSI List"));
+    modal = [...document.querySelectorAll(".modal-content")].find((m) =>
+      m.textContent.includes("IMSI List")
+    );
     if (modal) break;
     await wait(120);
   }
   if (!modal) {
-    alert("❌ ICCID modal failed to open.");
-    
-    // ❌ Restore state
-    gloable_icc_id = original_iccid;
-    iccidPromptProvided = original_prompt;
-    iccidUiConfirmed = original_confirmed;
+    console.warn("ICCID modal not found.");
     return false;
   }
 
-  // Get valid 7-digit suffix with retry
-  const cleanSuffix = await getValidIccidSuffix("Re-enter ICCID suffix (7 digits):");
+  // Find search input and button in the modal
+  const searchInput = modal.querySelector("input#searchtextIMSI.form-control") ||
+                      modal.querySelector("input[type='text'].form-control") ||
+                      modal.querySelector("input[placeholder*='Search']");
   
-  // ✅ USER CANCELED OR FAILED INPUT → RESTORE ORIGINAL STATE
-  if (!cleanSuffix) {
-    gloable_icc_id = original_iccid;
-    iccidPromptProvided = original_prompt;
-    iccidUiConfirmed = original_confirmed;
-    console.log("↩️ Retry canceled or invalid — restored previous ICCID state.");
-    return false;
-  }
-
-  const ICCID_number = `8925263790000${cleanSuffix}`;
-
-  const searchInput = modal.querySelector("input#searchtextIMSI.form-control");
-  const searchButton = modal.querySelector(".input-group-append button.btn.btn-info");
+  const searchButton = modal.querySelector(".input-group-append button.btn.btn-info") ||
+                       modal.querySelector("button.btn.btn-info");
+  
   if (!searchInput || !searchButton) {
-    alert("Search field not found.");
+    console.warn("ICCID search field/button not found.");
     
-    // ❌ Restore state
-    gloable_icc_id = original_iccid;
-    iccidPromptProvided = original_prompt;
-    iccidUiConfirmed = original_confirmed;
-    return false;
-  }
-
-  searchInput.value = ICCID_number;
-  ["input", "change", "keyup"].forEach(e => searchInput.dispatchEvent(new Event(e, { bubbles: true })));
-  searchButton.click();
-  await wait(1200);
-
-  const closeBtn = modal.querySelector(".close") || modal.querySelector("button.btn-secondary");
-  if (closeBtn) closeBtn.click();
-  await wait(800);
-
-  if (detectIccidInUi(ICCID_number)) {
-    gloable_icc_id = ICCID_number;
-    iccidPromptProvided = true;
-    iccidUiConfirmed = true;
-    saveIccid(ICCID_number, { msisdn: gloable_msisdn });
-    alert("✅ ICCID re-selection successful!");
-    return true;
+    // Fallback to manual checkbox selection if search not available
+    const checkboxes = [
+      ...modal.querySelectorAll('table input.form-check-input[type="checkbox"]'),
+    ];
+    
+    if (checkboxes.length === 0) {
+      alert("❌ No ICCID rows found.");
+      return false;
+    }
+    
+    // Try to select first checkbox
+    const targetCheckbox = checkboxes[0];
+    targetCheckbox.checked = true;
+    ["click", "input", "change"].forEach((t) =>
+      targetCheckbox.dispatchEvent(new Event(t, { bubbles: true }))
+    );
+    
+    // Extract ICCID from the row
+    const iccidRow = targetCheckbox.closest('tr');
+    const iccidCell = iccidRow?.cells[1] || 
+                      iccidRow?.querySelector('td:nth-child(2)') || 
+                      iccidRow?.querySelector('td');
+    
+    if (iccidCell) {
+      const rawIccid = iccidCell.textContent.trim().replace(/\D/g, '');
+      gloable_icc_id = rawIccid;
+      console.log("📱 Selected ICCID from first row:", gloable_icc_id);
+    }
+    
   } else {
-    // ❌ ICCID not detected → restore original state
-    gloable_icc_id = original_iccid;
-    iccidPromptProvided = original_prompt;
-    iccidUiConfirmed = original_confirmed;
-    alert("⚠️ ICCID not detected after retry. Restored previous entry.");
+    // SEARCH METHOD - Auto-select and save with retry until found
+    let found = false;
+    let retryCount = 0;
+    
+    while (!found) {
+      retryCount++;
+      
+      // Get valid 7-digit ICCID suffix from user
+      const promptMessage = retryCount === 1 
+        ? "Enter ICCID last 7 digits (will auto-add 8925263790000):"
+        : `Retry #${retryCount}: Enter ICCID last 7 digits (will auto-add 8925263790000):`;
+      
+      const cleanSuffix = await getValidIccidSuffix(promptMessage);
+      
+      // User clicked Cancel
+      if (!cleanSuffix) {
+        const cancelConfirm = confirm("Are you sure you want to cancel ICCID selection?");
+        if (cancelConfirm) {
+          console.log("ICCID selection cancelled by user");
+          return false;
+        } else {
+          continue; // Continue trying if user doesn't want to cancel
+        }
+      }
+      
+      // Auto-add prefix to create full ICCID for search
+      const searchIccid = `8925263790000${cleanSuffix}`;
+      console.log("🔍 Searching for ICCID:", searchIccid);
+      
+      // Fill search input
+      searchInput.value = searchIccid;
+      ["input", "change", "keyup"].forEach((e) =>
+        searchInput.dispatchEvent(new Event(e, { bubbles: true }))
+      );
+      
+      // Click search button
+      searchButton.click();
+      await wait(2000); // Wait for search results
+      
+      // Now look for checkboxes in the search results
+      const checkboxes = [
+        ...modal.querySelectorAll('table input.form-check-input[type="checkbox"]'),
+      ];
+      
+      if (checkboxes.length === 0) {
+        const retryChoice = confirm(`❌ No ICCID found for: ${searchIccid}\n\nClick OK to try again, or Cancel to stop.`);
+        if (retryChoice) {
+          continue; // Try again
+        } else {
+          return false; // User chose to stop
+        }
+      }
+      
+      // Try to select the first checkbox (usually the search result)
+      let selectedCheckbox = null;
+      let capturedIccid = null;
+      
+      // Try to find checkbox in first row
+      if (checkboxes.length > 0) {
+        selectedCheckbox = checkboxes[0];
+        
+        // Extract ICCID from the row
+        const iccidRow = selectedCheckbox.closest('tr');
+        const iccidCell = iccidRow?.cells[1] || 
+                          iccidRow?.querySelector('td:nth-child(2)') || 
+                          iccidRow?.querySelector('td');
+        
+        if (iccidCell) {
+          let rawIccid = iccidCell.textContent.trim().replace(/\D/g, '');
+          capturedIccid = rawIccid;
+        }
+      }
+      
+      // If first checkbox fails, try to find exact match in results
+      if (!capturedIccid) {
+        for (let i = 0; i < checkboxes.length; i++) {
+          const checkbox = checkboxes[i];
+          const iccidRow = checkbox.closest('tr');
+          const iccidCell = iccidRow?.cells[1] || 
+                            iccidRow?.querySelector('td:nth-child(2)') || 
+                            iccidRow?.querySelector('td');
+          
+          if (iccidCell) {
+            let rawIccid = iccidCell.textContent.trim().replace(/\D/g, '');
+            
+            // Check if this matches our search
+            if (rawIccid.includes(searchIccid) || rawIccid.endsWith(cleanSuffix)) {
+              selectedCheckbox = checkbox;
+              capturedIccid = rawIccid;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!selectedCheckbox || !capturedIccid) {
+        const retryChoice = confirm("❌ Could not select ICCID from search results.\n\nClick OK to try again, or Cancel to stop.");
+        if (retryChoice) {
+          continue; // Try again
+        } else {
+          return false; // User chose to stop
+        }
+      }
+      
+      // Select the checkbox
+      selectedCheckbox.checked = true;
+      ["click", "input", "change"].forEach((t) =>
+        selectedCheckbox.dispatchEvent(new Event(t, { bubbles: true }))
+      );
+      
+      gloable_icc_id = capturedIccid;
+      console.log(`📱 Selected ICCID from search:`, gloable_icc_id);
+      
+      // Save ICCID to log immediately without UI detection
+      saveIccid(gloable_icc_id, { msisdn: gloable_msisdn });
+      console.log("✅ ICCID saved to log.");
+      
+      found = true;
+    }
+  }
+
+  // Save button click
+  const saveBtn = modal.querySelector("button.btn.btn-info.mx-2") ||
+                  modal.querySelector("button[type='submit']") ||
+                  modal.querySelector(".btn-primary");
+  
+  if (saveBtn) {
+    await wait(300);
+    saveBtn.click();
+  }
+
+  // Wait for modal to close
+  for (let i = 0; i < 25; i++) {
+    const stillOpen = [...document.querySelectorAll(".modal-content")].some(
+      (m) => m.textContent.includes("IMSI List")
+    );
+    if (!stillOpen) break;
+    await wait(120);
+  }
+
+  // Set flags without UI detection
+  iccidPromptProvided = true;
+  iccidUiConfirmed = true;
+  
+  console.log("✅ ICCID selection completed and saved to log.");
+  return true;
+}
+
+// =========================================
+// MSISDN SELECTION WITH AUTO-SEARCH
+// =========================================
+async function addMsisdnSeries() {
+  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+
+  const addIcons = [
+    ...document.querySelectorAll("button.btn.btn-info .material-icons"),
+  ].filter((s) => s.textContent.trim() === "add");
+
+  const addBtn = addIcons[1]?.closest("button");
+  if (!addBtn) {
+    console.warn("MSISDN Add button not found.");
     return false;
   }
+
+  addBtn.click();
+
+  let modal = null;
+  for (let i = 0; i < 25; i++) {
+    modal = [...document.querySelectorAll(".modal-content")].find((m) =>
+      m.textContent.includes("MSISDN List")
+    );
+    if (modal) break;
+    await wait(120);
+  }
+  if (!modal) {
+    console.warn("MSISDN modal not found.");
+    return false;
+  }
+
+  // Find search input and button in the modal
+  const searchInput = modal.querySelector("input[type='text'].form-control") || 
+                      modal.querySelector("input#searchtext.form-control") ||
+                      modal.querySelector("input[placeholder*='Search']");
+  
+  const searchButton = modal.querySelector("button.btn.btn-info") || 
+                       modal.querySelector(".input-group-append button");
+  
+  if (!searchInput || !searchButton) {
+    console.warn("MSISDN search field/button not found. Falling back to row selection method.");
+    
+    // Fallback to original row selection method if search not available
+    const checkboxes = [
+      ...modal.querySelectorAll('table input.form-check-input[type="checkbox"]'),
+    ];
+
+    if (checkboxes.length < 10) {
+      alert(`Only ${checkboxes.length} MSISDN rows — cannot select 10th.`);
+      return false;
+    }
+
+    // Try rows: 10th (index 9), 9th (8), 8th (7), 7th (6), 6th (5)
+    const tryIndices = [9, 8, 7, 6, 5];
+    let selectedIdx = -1;
+    let capturedMsisdn = null;
+
+    for (const idx of tryIndices) {
+      const checkbox = checkboxes[idx];
+      const msisdnRow = checkbox.closest('tr');
+      if (!msisdnRow) continue;
+
+      const msisdnCell =
+        msisdnRow.cells[1] ||
+        msisdnRow.querySelector('td:nth-child(2)') ||
+        msisdnRow.querySelector('td');
+
+      if (!msisdnCell) continue;
+
+      let rawMsisdn = msisdnCell.textContent.trim().replace(/\D/g, '');
+      // Remove 252 prefix if present
+      if (rawMsisdn.startsWith('252')) {
+        rawMsisdn = rawMsisdn.substring(3);
+      }
+
+      // Skip if empty or too short
+      if (rawMsisdn.length < 9) continue;
+
+      // Check if already in your log
+      const isUsed = isMsisdnUsedRecently(rawMsisdn, 2); // last 2 days
+      if (!isUsed) {
+        selectedIdx = idx;
+        capturedMsisdn = rawMsisdn;
+        break; // Use this one!
+      }
+    }
+
+    // If all are used, fall back to 10th anyway (to avoid stopping)
+    if (selectedIdx === -1) {
+      console.warn("⚠️ All of 6th–10th MSISDNs appear used. Using 10th as fallback.");
+      selectedIdx = 9;
+      const fallbackRow = checkboxes[9].closest('tr');
+      const fallbackCell = fallbackRow?.cells[1] || fallbackRow?.querySelector('td:nth-child(2)') || fallbackRow?.querySelector('td');
+      if (fallbackCell) {
+        let raw = fallbackCell.textContent.trim().replace(/\D/g, '');
+        capturedMsisdn = raw.startsWith('252') ? raw.substring(3) : raw;
+      }
+    }
+
+    if (selectedIdx === -1 || !capturedMsisdn) {
+      alert("❌ Failed to extract MSISDN from selected row.");
+      return false;
+    }
+
+    // SELECT THE CHECKBOX
+    const targetCheckbox = checkboxes[selectedIdx];
+    targetCheckbox.checked = true;
+    ["click", "input", "change"].forEach((t) =>
+      targetCheckbox.dispatchEvent(new Event(t, { bubbles: true }))
+    );
+
+    gloable_msisdn = capturedMsisdn;
+    console.log(`📱 Selected MSISDN from row ${selectedIdx + 1}:`, gloable_msisdn);
+    
+  } else {
+    // SEARCH METHOD - Ask user for last 7 digits, auto-add 25271 prefix with retry until found
+    let found = false;
+    let retryCount = 0;
+    
+    while (!found) {
+      retryCount++;
+      
+      // Get valid 7-digit MSISDN suffix from user
+      const promptMessage = retryCount === 1
+        ? "Enter MSISDN last 7 digits (will auto-add 25271):"
+        : `Retry #${retryCount}: Enter MSISDN last 7 digits (will auto-add 25271):`;
+      
+      const cleanSuffix = await getValidMsisdnSuffix(promptMessage);
+      
+      // User clicked Cancel
+      if (!cleanSuffix) {
+        const cancelConfirm = confirm("Are you sure you want to cancel MSISDN selection?");
+        if (cancelConfirm) {
+          console.log("MSISDN selection cancelled by user");
+          return false;
+        } else {
+          continue; // Continue trying if user doesn't want to cancel
+        }
+      }
+      
+      // Auto-add 25271 prefix to create full MSISDN for search
+      const searchMsisdn = `25271${cleanSuffix}`;
+      console.log("🔍 Searching for MSISDN:", searchMsisdn);
+      
+      // Fill search input
+      searchInput.value = searchMsisdn;
+      ["input", "change", "keyup"].forEach((e) =>
+        searchInput.dispatchEvent(new Event(e, { bubbles: true }))
+      );
+      
+      // Click search button
+      searchButton.click();
+      await wait(2000); // Wait for search results
+      
+      // Now look for checkboxes in the search results
+      const checkboxes = [
+        ...modal.querySelectorAll('table input.form-check-input[type="checkbox"]'),
+      ];
+      
+      if (checkboxes.length === 0) {
+        const retryChoice = confirm(`❌ No MSISDN found for: ${searchMsisdn}\n\nClick OK to try again, or Cancel to stop.`);
+        if (retryChoice) {
+          continue; // Try again
+        } else {
+          return false; // User chose to stop
+        }
+      }
+      
+      // Try to select the first checkbox (usually the search result)
+      let selectedCheckbox = null;
+      let capturedMsisdn = null;
+      
+      // Try to find checkbox in first row
+      if (checkboxes.length > 0) {
+        selectedCheckbox = checkboxes[0];
+        
+        // Extract MSISDN from the row
+        const msisdnRow = selectedCheckbox.closest('tr');
+        const msisdnCell = msisdnRow?.cells[1] || 
+                           msisdnRow?.querySelector('td:nth-child(2)') || 
+                           msisdnRow?.querySelector('td');
+        
+        if (msisdnCell) {
+          let rawMsisdn = msisdnCell.textContent.trim().replace(/\D/g, '');
+          if (rawMsisdn.startsWith('252')) {
+            rawMsisdn = rawMsisdn.substring(3);
+          }
+          capturedMsisdn = rawMsisdn;
+        }
+      }
+      
+      // If first checkbox fails, try to find exact match in results
+      if (!capturedMsisdn) {
+        for (let i = 0; i < checkboxes.length; i++) {
+          const checkbox = checkboxes[i];
+          const msisdnRow = checkbox.closest('tr');
+          const msisdnCell = msisdnRow?.cells[1] || 
+                             msisdnRow?.querySelector('td:nth-child(2)') || 
+                             msisdnRow?.querySelector('td');
+          
+          if (msisdnCell) {
+            let rawMsisdn = msisdnCell.textContent.trim().replace(/\D/g, '');
+            if (rawMsisdn.startsWith('252')) {
+              rawMsisdn = rawMsisdn.substring(3);
+            }
+            
+            // Check if this matches our search
+            if (rawMsisdn === `71${cleanSuffix}` || rawMsisdn.includes(cleanSuffix)) {
+              selectedCheckbox = checkbox;
+              capturedMsisdn = rawMsisdn;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!selectedCheckbox || !capturedMsisdn) {
+        const retryChoice = confirm("❌ Could not select MSISDN from search results.\n\nClick OK to try again, or Cancel to stop.");
+        if (retryChoice) {
+          continue; // Try again
+        } else {
+          return false; // User chose to stop
+        }
+      }
+      
+      // Select the checkbox
+      selectedCheckbox.checked = true;
+      ["click", "input", "change"].forEach((t) =>
+        selectedCheckbox.dispatchEvent(new Event(t, { bubbles: true }))
+      );
+      
+      gloable_msisdn = capturedMsisdn;
+      console.log(`📱 Selected MSISDN from search:`, gloable_msisdn);
+      found = true;
+    }
+  }
+
+  // Save button click
+  const saveBtn = modal.querySelector("button.btn.btn-info.mx-2");
+  if (saveBtn) {
+    await wait(300);
+    saveBtn.click();
+  }
+
+  // Wait for modal to close
+  for (let i = 0; i < 25; i++) {
+    const stillOpen = [...document.querySelectorAll(".modal-content")].some(
+      (m) => m.textContent.includes("MSISDN List")
+    );
+    if (!stillOpen) break;
+    await wait(120);
+  }
+
+  return true;
 }
 
 // --- Expose functions ---
@@ -415,7 +834,6 @@ window.saveIccid = saveIccid;
 window.deleteLog = deleteLog;
 window.clearAllLogs = clearAllLogs;
 window.generateActivationReport = generateActivationReport;
-window.retryIccidSelection = retryIccidSelection;
 window.iccidLog = iccidLog;
 
 // =========================================
@@ -737,123 +1155,7 @@ async function page2() {
   }
   await wait(500);
 
-async function addMsisdnSeries() {
-  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
-
-  const addIcons = [
-    ...document.querySelectorAll("button.btn-info .material-icons"),
-  ].filter((s) => s.textContent.trim() === "add");
-
-  const addBtn = addIcons[1]?.closest("button");
-  if (!addBtn) {
-    console.warn("MSISDN Add button not found.");
-    return false;
-  }
-
-  addBtn.click();
-
-  let modal = null;
-  for (let i = 0; i < 25; i++) {
-    modal = [...document.querySelectorAll(".modal-content")].find((m) =>
-      m.textContent.includes("MSISDN List")
-    );
-    if (modal) break;
-    await wait(120);
-  }
-  if (!modal) {
-    console.warn("MSISDN modal not found.");
-    return false;
-  }
-
-  const checkboxes = [
-    ...modal.querySelectorAll('table input.form-check-input[type="checkbox"]'),
-  ];
-
-  if (checkboxes.length < 10) {
-    alert(`Only ${checkboxes.length} MSISDN rows — cannot select 10th.`);
-    return false;
-  }
-
-  // ✅ Try rows: 10th (index 9), 9th (8), 8th (7), 7th (6), 6th (5)
-  const tryIndices = [9, 8, 7, 6, 5];
-  let selectedIdx = -1;
-  let capturedMsisdn = null;
-
-  for (const idx of tryIndices) {
-    const tenthCheckbox = checkboxes[idx];
-    const msisdnRow = tenthCheckbox.closest('tr');
-    if (!msisdnRow) continue;
-
-    const msisdnCell =
-      msisdnRow.cells[1] ||
-      msisdnRow.querySelector('td:nth-child(2)') ||
-      msisdnRow.querySelector('td');
-
-    if (!msisdnCell) continue;
-
-    let rawMsisdn = msisdnCell.textContent.trim().replace(/\D/g, '');
-    // Remove 252 prefix if present
-    if (rawMsisdn.startsWith('252')) {
-      rawMsisdn = rawMsisdn.substring(3);
-    }
-
-    // Skip if empty or too short
-    if (rawMsisdn.length < 9) continue;
-
-    // ✅ Check if already in your log
-      const isUsed = isMsisdnUsedRecently(rawMsisdn, 2); // last 2 days
-      if (!isUsed) {
-      selectedIdx = idx;
-      capturedMsisdn = rawMsisdn;
-      break; // Use this one!
-    }
-  }
-
-  // ✅ If all are used, fall back to 10th anyway (to avoid stopping)
-  if (selectedIdx === -1) {
-    console.warn("⚠️ All of 6th–10th MSISDNs appear used. Using 10th as fallback.");
-    selectedIdx = 9;
-    const fallbackRow = checkboxes[9].closest('tr');
-    const fallbackCell = fallbackRow?.cells[1] || fallbackRow?.querySelector('td:nth-child(2)') || fallbackRow?.querySelector('td');
-    if (fallbackCell) {
-      let raw = fallbackCell.textContent.trim().replace(/\D/g, '');
-      capturedMsisdn = raw.startsWith('252') ? raw.substring(3) : raw;
-    }
-  }
-
-  if (selectedIdx === -1 || !capturedMsisdn) {
-    alert("❌ Failed to extract MSISDN from selected row.");
-    return false;
-  }
-
-  // ✅ SELECT THE CHECKBOX
-  const targetCheckbox = checkboxes[selectedIdx];
-  targetCheckbox.checked = true;
-  ["click", "input", "change"].forEach((t) =>
-    targetCheckbox.dispatchEvent(new Event(t, { bubbles: true }))
-  );
-
-  gloable_msisdn = capturedMsisdn;
-  console.log(`📱 Selected MSISDN from row ${selectedIdx + 1}:`, gloable_msisdn);
-
-  const saveBtn = modal.querySelector("button.btn.btn-info.mx-2");
-  if (saveBtn) {
-    await wait(300);
-    saveBtn.click();
-  }
-
-  // Wait for modal to close
-  for (let i = 0; i < 25; i++) {
-    const stillOpen = [...document.querySelectorAll(".modal-content")].some(
-      (m) => m.textContent.includes("MSISDN List")
-    );
-    if (!stillOpen) break;
-    await wait(120);
-  }
-
-  return true;
-}
-
+  // Use the updated addMsisdnSeries function
   const msisdnDone = await addMsisdnSeries();
   if (!msisdnDone) {
     console.error("MSISDN failed. Stopping Page2.");
@@ -861,78 +1163,7 @@ async function addMsisdnSeries() {
   }
   await wait(1000);
 
-  // =========================================
-  // HANDLE ICCID — WITH 7-DIGIT VALIDATION
-  // =========================================
-  async function handle_ICCID() {
-    const addIcons = [
-      ...document.querySelectorAll("button.btn.btn-info .material-icons"),
-    ].filter((s) => s.textContent.trim() === "add");
-    const addBtn = addIcons[2]?.closest("button");
-    if (!addBtn) {
-      console.warn("ICCID Add button not found.");
-      return false;
-    }
-
-    addBtn.click();
-
-    let modal = null;
-    for (let i = 0; i < 25; i++) {
-      modal = [...document.querySelectorAll(".modal-content")].find((m) =>
-        m.textContent.includes("IMSI List")
-      );
-      if (modal) break;
-      await wait(120);
-    }
-    if (!modal) {
-      console.warn("ICCID modal not found.");
-      return false;
-    }
-
-    // Get valid 7-digit suffix with retry
-    const cleanSuffix = await getValidIccidSuffix("Enter ICCID suffix (7 digits) 8925263790000xxxxxx");
-    if (!cleanSuffix) {
-      return false;
-    }
-    const ICCID_number = `8925263790000${cleanSuffix}`;
-    console.log("✅ Valid ICCID entered:", ICCID_number);
-
-    const searchInput = modal.querySelector("input#searchtextIMSI.form-control");
-    const searchButton = modal.querySelector(".input-group-append button.btn.btn-info");
-    if (!searchInput || !searchButton) {
-      console.warn("ICCID search field/button not found.");
-      return false;
-    }
-
-    searchInput.value = ICCID_number;
-    ["input", "change", "keyup"].forEach((e) =>
-      searchInput.dispatchEvent(new Event(e, { bubbles: true }))
-    );
-    searchButton.click();
-
-    await wait(1200);
-
-    const closeBtn = modal.querySelector(".close") || modal.querySelector("button.btn-secondary");
-    if (closeBtn) closeBtn.click();
-    await wait(800);
-
-    if (detectIccidInUi(ICCID_number)) {
-      gloable_icc_id = ICCID_number;
-      iccidPromptProvided = true;
-      iccidUiConfirmed = true;
-      saveIccid(ICCID_number, { msisdn: gloable_msisdn });
-      console.log("✅ ICCID confirmed in UI.");
-    } else {
-      gloable_icc_id = null;
-      iccidPromptProvided = false;
-      iccidUiConfirmed = false;
-      alert("⚠️ ICCID not detected in UI after selection.");
-      return false;
-    }
-
-    return true;
-  }
-
+  // Use the updated handle_ICCID function
   const iccidDone = await handle_ICCID();
   if (!iccidDone) {
     console.error("ICCID step failed. Stopping Page2.");
@@ -941,95 +1172,6 @@ async function addMsisdnSeries() {
   await wait(1000);
 }
 
-// =========================================
-// NEXT
-// =========================================
-async function next() {
-  if (!iccidPromptProvided || !iccidUiConfirmed || !gloable_icc_id) {
-    alert("❌ ICCID not fully confirmed! Please complete Page 2 properly.");
-    console.error("next() blocked: ICCID missing or not accepted by UI.");
-    return;
-  }
-
-  const wait = (ms) => new Promise(res => setTimeout(res, ms));
-
-  async function clickButton(label, timeout = 6000) {
-    const start = performance.now();
-    let btn = null;
-    while (performance.now() - start < timeout) {
-      btn = [...document.querySelectorAll("button")]
-        .find(b => b.textContent.trim().toLowerCase() === label.toLowerCase());
-      if (btn) break;
-      await wait(150);
-    }
-    if (!btn) {
-      console.warn(`Button "${label}" not found.`);
-      return false;
-    }
-    btn.click();
-    console.log(`Clicked: ${label}`);
-    await wait(700);
-    return true;
-  }
-
-  await clickButton("Next");
-  await clickButton("Next");
-  await wait(1000);
-  
-  await clickButton("Checkout");
-  
-  
-async function closeModal(timeout = 8000) {
-  const start = performance.now();
-  let closeBtn = null;
-  while (performance.now() - start < timeout) {
-    closeBtn = [...document.querySelectorAll("button.btn.btn-small.btn-info")]
-      .find(b => b.textContent.trim().toLowerCase() === "close");
-    if (closeBtn) break;
-    await wait(200);
-  }
-  if (closeBtn) {
-    closeBtn.click();
-    console.log("Modal closed.");
-    await wait(500);
-    }
-  }
-  
-// Wait for checkout modal body WITH content
-let checkoutModalBody = null;
-for (let i = 0; i < 50; i++) { // Max 5s
-  checkoutModalBody = document.querySelector('.modal.show .modal-body'); // Target VISIBLE modal
-  if (checkoutModalBody?.textContent.trim()) break;
-  await wait(100);
-}
-
-if (checkoutModalBody) {
-  // Fallback chain: span > direct p > any text
-  const msg = 
-    checkoutModalBody.querySelector('span')?.textContent.trim() ||
-    checkoutModalBody.querySelector(':scope > p')?.textContent.trim() ||
-    checkoutModalBody.textContent.trim();
-    console.log("✅ Checkout Message:", msg);
-    await wait(1500);
-    await closeModal();
-} else {
-  console.warn("⚠️ Checkout modal not detected");
-}
-
-await wait(3000);
-  
-
-console.log("🚀 Starting activation flow...");
-const activationResult = await completeActivationFlow();
-
-if (activationResult?.success) {
-  console.log("✅ FULL PROCESS COMPLETED SUCCESSFULLY");
-  console.log("ICCID:", activationResult.iccid);
-  console.log("MSISDN:", activationResult.msisdn);
-  console.log("Message:", activationResult.message);
-} else {
-  console.warn("⚠️ Activation flow encountered issues");
-}
 // =========================================
 // COMPLETE ACTIVATION FLOW
 // =========================================
@@ -1228,39 +1370,91 @@ async function completeActivationFlow() {
   };
 }
 
-//
-// Wait for activation modal body WITH content
-//
-let activationModalBody = null;
-for (let i = 0; i < 50; i++) {
-  activationModalBody = document.querySelector('.modal.show .modal-body');
-  if (activationModalBody?.textContent.trim()) break;
+// =========================================
+// NEXT
+// =========================================
+async function next() {
+  // ICCID validation check REMOVED - function will proceed regardless
+
+  const wait = (ms) => new Promise(res => setTimeout(res, ms));
+
+  async function clickButton(label, timeout = 6000) {
+    const start = performance.now();
+    let btn = null;
+    while (performance.now() - start < timeout) {
+      btn = [...document.querySelectorAll("button")]
+        .find(b => b.textContent.trim().toLowerCase() === label.toLowerCase());
+      if (btn) break;
+      await wait(150);
+    }
+    if (!btn) {
+      console.warn(`Button "${label}" not found.`);
+      return false;
+    }
+    btn.click();
+    console.log(`Clicked: ${label}`);
+    await wait(700);
+    return true;
+  }
+
+  await clickButton("Next");
+  await clickButton("Next");
+  await wait(1000);
+  
+  await clickButton("Checkout");
+  
+  
+async function closeModal(timeout = 8000) {
+  const start = performance.now();
+  let closeBtn = null;
+  while (performance.now() - start < timeout) {
+    closeBtn = [...document.querySelectorAll("button.btn.btn-small.btn-info")]
+      .find(b => b.textContent.trim().toLowerCase() === "close");
+    if (closeBtn) break;
+    await wait(200);
+  }
+  if (closeBtn) {
+    closeBtn.click();
+    console.log("Modal closed.");
+    await wait(500);
+    }
+  }
+  
+// Wait for checkout modal body WITH content
+let checkoutModalBody = null;
+for (let i = 0; i < 50; i++) { // Max 5s
+  checkoutModalBody = document.querySelector('.modal.show .modal-body'); // Target VISIBLE modal
+  if (checkoutModalBody?.textContent.trim()) break;
   await wait(100);
 }
-if (activationModalBody) {
-  // Fallback chain: direct p > any p > raw text
+
+if (checkoutModalBody) {
+  // Fallback chain: span > direct p > any text
   const msg = 
-    activationModalBody.querySelector(':scope > p')?.textContent.trim() ||
-    activationModalBody.querySelector('p')?.textContent.trim() ||
-    activationModalBody.textContent.trim();
-    console.log("✅ Activation Message:", msg);
-  
-  if (msg.toLowerCase().includes('Subscriber not found') || msg.toLowerCase().includes('not')) {
-    if (iccidLog.length > 0) {
-        const removed = iccidLog.pop();
-        saveLog();
-        console.log("🗑️ Removed failed entry:", removed);
-      }
-  }
-  
-  // Optional: Auto-close if success detected
-  if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('activated')) {
+    checkoutModalBody.querySelector('span')?.textContent.trim() ||
+    checkoutModalBody.querySelector(':scope > p')?.textContent.trim() ||
+    checkoutModalBody.textContent.trim();
+    console.log("✅ Checkout Message:", msg);
     await wait(1500);
     await closeModal();
-  }
 } else {
-  console.warn("⚠️ Activation modal not detected");
+  console.warn("⚠️ Checkout modal not detected");
 }
 
+await wait(3000);
   
+
+console.log("🚀 Starting activation flow...");
+const activationResult = await completeActivationFlow();
+
+if (activationResult?.success) {
+  console.log("✅ FULL PROCESS COMPLETED SUCCESSFULLY");
+  console.log("ICCID:", activationResult.iccid);
+  console.log("MSISDN:", activationResult.msisdn);
+  console.log("Message:", activationResult.message);
+} else {
+  console.warn("⚠️ Activation flow encountered issues");
+}
+
+// Activation modal handling is now inside completeActivationFlow
 }
