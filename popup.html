@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <style>
     body {
-      width: 240px;
+      width: 180px;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 14px;
@@ -20,14 +20,14 @@
       margin: 6px 0;
       border: none;
       border-radius: 6px;
-      background: #1a73e8;
+      background: #db4e54;
       color: white;
       cursor: pointer;
       font-size: 14px;
       font-weight: 500;
     }
     button:hover {
-      background: #0d5bb8;
+      background: #eeabaf;
     }
     select {
       width: 100%;
@@ -40,33 +40,37 @@
     .section {
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid #ddd;
+      border-top: 1px solid #e33f46;
     }
     h3 {
       text-align: center;
       margin: 0 0 14px 0;
-      color: #1a73e8;
+      color: #d9383c;
       font-size: 16px;
+    }
+    option{
+      text-align: center;
     }
   </style>
 </head>
 <body>
-  <h3>CRM Automator v2</h3>
+  <h3>CRM Automator v3  </h3>
 
-  <button id="page1">📄 Page 1</button>
-  <button id="page2">📝 Page 2</button>
-  <button id="retry">🔄 Retry ICCID</button>
-  <button id="next">✅ Next</button>
+  <button id="page1">Page 1</button>
+  <button id="page2">Page 2</button>
+  <button id="next">Activate</button>
 
-  <div class="section">
+  <!-- <div class="section">
     <select id="reportFormat">
-      <option value="detailed">📊 Detailed Report</option>
+      <option value="detailed">  Detailed Report</option>
       <option value="simple">📄 Simple Summary</option>
       <option value="csv">📤 CSV Export</option>
     </select>
     <button id="generateReport">📈 Generate Report</button>
-  </div>
+  </div> -->
 
+  
+  <!-- <p style="font-size: 5px; text-align: center;">Created by Abdirahman Abdikarim</p> -->
   <script src="popup.js"></script>
 </body>
 </html>
