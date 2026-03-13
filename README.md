@@ -34,7 +34,7 @@ Step 5: Check Installation
 You should now see "CRM Amtel Automator" in your extensions list
 The extension icon should appear in your Chrome toolbar (top-right)
 
-> ✅ DOne
+> ✅ Done
 
 ---
 
