@@ -119,7 +119,7 @@ function detectIccidInUi(expectedIccid) {
 }
 
 // --- Get valid 7-digit ICCID suffix with retry ---
-async function getValidIccidSuffix(initialMessage = "Enter ICCID last 7 digits (will auto-add 8925263790000):") {
+async function getValidIccidSuffix(initialMessage = "Enter ICCID last 7 digits (will auto-add 8925263790000xxxxxxx):") {
   const MAX_ATTEMPTS = 3;
   let attempt = 0;
 
@@ -151,7 +151,7 @@ async function getValidIccidSuffix(initialMessage = "Enter ICCID last 7 digits (
 }
 
 // --- Get valid 7-digit MSISDN suffix with retry ---
-async function getValidMsisdnSuffix(initialMessage = "Enter MSISDN last 7 digits (will auto-add 25271):") {
+async function getValidMsisdnSuffix(initialMessage = "Enter MSISDN last 7 digits (will auto-add 25271xxxxxxx):") {
   const MAX_ATTEMPTS = 3;
   let attempt = 0;
 
@@ -576,6 +576,10 @@ async function handle_ICCID() {
 // =========================================
 // MSISDN SELECTION WITH AUTO-SEARCH
 // =========================================
+
+// =========================================
+// MSISDN SELECTION WITH AUTO-SEARCH AND MCASH VERIFICATION
+// =========================================
 async function addMsisdnSeries() {
   const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -806,8 +810,106 @@ async function addMsisdnSeries() {
       
       gloable_msisdn = capturedMsisdn;
       console.log(`📱 Selected MSISDN from search:`, gloable_msisdn);
-      found = true;
+      
+      // =========================================
+// MCASH VERIFICATION - ADDED HERE
+// =========================================
+console.log('🔍 Starting MCASH verification for selected MSISDN...');
+
+// Find verify button within modal
+const verifyButton = [...modal.querySelectorAll('button')].find(btn => 
+  btn.textContent.trim().toLowerCase() === 'verify'
+);
+
+if (!verifyButton) {
+  console.warn('⚠️ Verify button not found in modal - proceeding without verification');
+  found = true;
+  continue;
+}
+
+console.log('✅ Verify button found in modal, clicking...');
+verifyButton.click();
+
+// Wait for verification result
+await wait(2000); // Wait 2 seconds for API response
+
+// Check for result within modal
+let verificationPassed = false;
+let verificationMessage = '';
+
+// Look for success message (User doesn't Exist on MCASH)
+const successMsg = modal.querySelector('p.mt-2.text-success') ||
+                  modal.querySelector('.text-success') ||
+                  [...modal.querySelectorAll('p, div, span')].find(el => 
+                    el.textContent.includes("User doesn't Exist on MCASH")
+                  );
+
+if (successMsg) {
+  verificationMessage = successMsg.textContent;
+  if (verificationMessage.includes("User doesn't Exist on MCASH")) {
+    console.log('✅ MCASH Verification: User does NOT exist - PASSED');
+    verificationPassed = true;  // <-- PASSED = true
+  }
+}
+
+// Look for failure message (User Exist on MCASH)
+const failureMsg = modal.querySelector('p.mt-2.text-danger') ||
+                  modal.querySelector('.text-danger') ||
+                  [...modal.querySelectorAll('p, div, span')].find(el => 
+                    el.textContent.includes('User Exist on MCASH')
+                  );
+
+if (failureMsg) {
+  verificationMessage = failureMsg.textContent;
+  if (verificationMessage.includes('User Exist on MCASH')) {
+    console.log('❌ MCASH Verification: User EXISTS - FAILED');
+    verificationPassed = false;  // <-- FAILED = false
+  }
+}
+
+// // Close/Dismiss the verification result message
+// const resultCloseBtn = modal.querySelector('button.btn-close') || 
+//                       modal.querySelector('button.close') ||
+//                       modal.querySelector('.modal-header button');
+// if (resultCloseBtn) {
+//   resultCloseBtn.click();
+//   await wait(500);
+// }
+
+
+if (verificationPassed) {  // <-- ONLY when verification FAILS
+    // <-- This runs when verification PASSES
+    console.log('✅ MCASH verification PASSED - User does not exist. Keeping number selected and proceeding...');
+    found = true;  // <-- Keep the number selected and exit the while loop
+    // The checkbox remains checked - we DON'T deselect it  
+  } else {
+  
+  console.log('🔄 MCASH verification FAILED - User exists. Deselecting current number and prompting for NEW number...');
+  
+  // Show alert to user
+  alert(`❌ MCASH Verification Failed: MSISDN ${gloable_msisdn} already exists in MCASH.\n\nPlease try a DIFFERENT 7-digit suffix.`);
+  
+  // Deselect the current checkbox (only on FAILURE)
+  selectedCheckbox.checked = false;
+  ["click", "input", "change"].forEach((t) =>
+    selectedCheckbox.dispatchEvent(new Event(t, { bubbles: true }))
+  );
+  
+  // Clear the global MSISDN
+  gloable_msisdn = null;
+  
+  // Clear the search input for the next attempt
+  searchInput.value = '';
+  ["input", "change", "keyup"].forEach((e) =>
+    searchInput.dispatchEvent(new Event(e, { bubbles: true }))
+  );
+  
+  continue; // Go back to asking for a NEW 7-digit suffix
+
+  }
+
     }
+    
   }
 
   // Save button click
@@ -828,6 +930,7 @@ async function addMsisdnSeries() {
 
   return true;
 }
+
 
 // --- Expose functions ---
 window.saveIccid = saveIccid;
