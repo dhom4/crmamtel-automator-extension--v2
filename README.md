@@ -40,6 +40,7 @@ The extension icon should appear in your Chrome toolbar (top-right)
 
 ![output2](https://github.com/user-attachments/assets/726588f5-247c-47ad-a80c-f6b83925d985)
 
+---
 
 ## 🎯 How to Use (Step-by-Step)
 
