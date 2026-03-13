@@ -11,28 +11,47 @@ Instead of clicking through multiple screens and typing information, the extensi
 
 ## 🛠️ How to Install
 Step 1: Download the Extension Files
+
 Go to my GitHub page: [Add your GitHub link here]
+
 Click the green "Code" button
+
 Select "Download ZIP"
+
 Extract the ZIP file to a folder on your computer
 
+
 Step 2: Open Chrome Extensions Page
+
 Open Google Chrome
+
 Type chrome://extensions/ in the address bar and press Enter
+
 Or click the three dots menu → More Tools → Extensions
 
+
 Step 3: Enable Developer Mode
+
 Look for the "Developer mode" toggle switch in the top-right corner
+
 Click it to turn it ON
 
+
 Step 4: Load the Extension
+
 Click the "Load unpacked" button that appears
+
 Select the folder where you extracted the files
+
 Click "Select Folder"
 
+
 Step 5: Check Installation
+
 You should now see "CRM Amtel Automator" in your extensions list
+
 The extension icon should appear in your Chrome toolbar (top-right)
+
 
 > ✅ Done
 
@@ -81,4 +100,5 @@ The extension icon should appear in your Chrome toolbar (top-right)
 Contact: 0717102026 & 0716408296
 
 Version: 3.0
+
 Last Updated: March 2026
