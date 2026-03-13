@@ -25,7 +25,7 @@ Instead of clicking through multiple screens and typing information, the extensi
 
 
 #### Step 3: Enable Developer Mode
--Look for the "Developer mode" toggle switch in the top-right corner
+- Look for the "Developer mode" toggle switch in the top-right corner
 - Click it to turn it ON
 
 
