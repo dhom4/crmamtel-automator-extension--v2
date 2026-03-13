@@ -12,7 +12,7 @@ Instead of clicking through multiple screens and typing information, the extensi
 ## 🛠️ How to Install
 #### Step 1: Download the Extension Files
 
-- Go to my GitHub page: [Add your GitHub link here]
+- Go to my GitHub page: github.com/imabdram
 - Click the green "Code" button
 - Select "Download ZIP"
 - Extract the ZIP file to a folder on your computer
